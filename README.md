@@ -10,7 +10,9 @@ los mensajes de error y algunos detalles pueden variar. Para probarla en local, 
 
 En modo simulado también funcionan `INSERT`, `UPDATE`, `DELETE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `CREATE`, `ALTER`,
 `DROP` y `TRUNCATE`. Lo confirmado queda guardado en tu navegador; `REINICIAR` vuelve a los datos originales.
-No ejecuta bloques PL/SQL. Con Oracle real la terminal es de solo lectura.
+También hay comandos de SQL*Plus (`/`, `LIST`, `EDIT`, `SET`, `COLUMN`, `&variable`, `VARIABLE`, `PRINT`, `SPOOL`, `@`),
+`MERGE` y bloques PL/SQL básicos. No crea procedimientos, funciones, triggers ni paquetes, y no admite `ROWNUM`.
+Con Oracle real la terminal es de solo lectura.
 
 ## Requisitos (solo para Oracle real)
 - Oracle XE (probado en 11.2)

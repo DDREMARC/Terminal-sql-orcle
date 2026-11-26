@@ -72,10 +72,18 @@
     [/^column "(.+)" is of type/, 932, c => `el tipo de dato no sirve para la columna "${c}"`],
     [/^column "(.+)" specified more than once/, 957, c => `la columna "${c}" está repetida`],
     [/^(?:no such savepoint|savepoint .+ does not exist)/, 1086, () => 'no se ha establecido ese punto de salvaguarda'],
+    // PL/SQL
+    [/^query returned no rows/, 1403, () => 'no se han encontrado datos'],
+    [/^query returned more than one row/, 1422, () => 'la recuperación exacta devuelve más filas de las solicitadas'],
+    [/^null value cannot be assigned to variable "(.+?)"/, 6502, v => `no se puede asignar NULL a la variable "${v}" (es NOT NULL)`],
+    [/^variable "(.+?)" is declared CONSTANT/, 6550, v => `PLS-00363: la constante "${v}" no se puede modificar`],
+    [/^variable "(.+?)" must have a default value/, 6550, v => `PLS-00218: la variable "${v}" es NOT NULL y debe inicializarse`],
+    [/^"(.+?)" is not a known variable/, 6550, v => `PLS-00201: el identificador "${v}" no está declarado`],
+    [/^missing (.+?) at/, 6550, x => `PLS-00103: falta ${x} en el bloque`],
   ];
 
   function simulador(e) {
-    if (e.message.startsWith('ORA-')) return e.message;
+    if (/^(ORA|SP2|PLS)-/.test(e.message)) return e.message;
     for (const [patron, codigo, texto] of SIM) {
       const m = patron.exec(e.message);
       if (m) return `ORA-${String(codigo).padStart(5, '0')}: ${texto(...m.slice(1))}`;

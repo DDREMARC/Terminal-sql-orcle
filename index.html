@@ -26,8 +26,9 @@
   <div class="entrada"><pre id="prompt" aria-hidden="true">SQL&gt;</pre><textarea id="linea" rows="1" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus aria-label="Línea de comandos SQL"></textarea></div>
 </main>
 <script src="datos.js?v=6"></script>
-<script src="errores.js?v=6"></script>
-<script src="motor.js?v=6"></script>
+<script src="errores.js?v=8"></script>
+<script src="motor.js?v=8"></script>
+<script src="sqlplus.js?v=8"></script>
 <script src="glosario.js?v=7"></script>
 <script src="retos-tiosam.js"></script>
 <script src="retos-tiosam-semanas.js"></script>
@@ -45,18 +46,8 @@ function escribir(texto, clase = '') {
   p.textContent = texto;
   p.className = clase;
   $('salida').append(p);
-}
-
-// Tabla al estilo SQL*Plus: números a la derecha, guiones bajo el título
-function tabla(res) {
-  const filas = res.filas.map(f => f.map(v => v ?? ''));
-  const esNum = res.columnas.map((_, i) => filas.some(f => f[i] !== '') && filas.every(f => f[i] === '' || /^-?\d*\.?\d+$/.test(f[i])));
-  const ancho = res.columnas.map((c, i) => Math.max(c.length, ...filas.map(f => f[i].length)));
-  const celda = (v, i) => esNum[i] ? v.padStart(ancho[i]) : v.padEnd(ancho[i]);
-  if (!filas.length) return escribir('\nninguna fila seleccionada\n');
-  const n = filas.length === 1 ? '1 fila seleccionada.' : filas.length + ' filas seleccionadas.';
-  escribir(['', res.columnas.map(celda).join(' '), ancho.map(a => '-'.repeat(a)).join(' '),
-    ...filas.map(f => f.map(celda).join(' ')), '', n, ''].join('\n'));
+  SP.anotar(texto);
+  $('terminal').scrollTop = $('terminal').scrollHeight;
 }
 
 function barra() {
@@ -76,6 +67,13 @@ Una consulta termina en ;  (o con / en una línea sola). Enter sin ; sigue en la
   Solo en modo simulado:
   INSERT, UPDATE, DELETE, COMMIT, ROLLBACK, SAVEPOINT, CREATE, ALTER, DROP, TRUNCATE
   REINICIAR    borra tus cambios y vuelve a los datos originales
+  PL/SQL básico: DECLARE ... BEGIN ... END;  y / en una línea sola (usa SET SERVEROUTPUT ON)
+  Comandos SQL*Plus:
+  /  RUN       repite lo último      LIST   EDIT   ver o editar lo último
+  SET          LINESIZE, PAGESIZE, SERVEROUTPUT, FEEDBACK, HEADING, VERIFY, TIMING
+  SHOW         SHOW ALL, SHOW LINESIZE      COLUMN col FORMAT a20 | 999.99 HEADING 'x'
+  &variable    pide el valor         DEFINE, UNDEFINE, ACCEPT, PROMPT
+  VARIABLE, PRINT, EXEC              SPOOL archivo ... SPOOL OFF      @ (abre un .sql)
   Flechas arriba/abajo: historial.   Esc: borra lo que escribes.
   Ctrl+Z deshace lo escrito.         Ctrl+Y o Ctrl+Shift+Z rehace.
   Tab pone sangría.                  Shift+Tab la quita.
@@ -114,46 +112,94 @@ async function tablas() {
   escribir('\n' + Object.entries(res).map(([t, d]) => `${t.toUpperCase().padEnd(16)} ${d.filas} filas`).join('\n') + '\n');
 }
 
-async function procesar(texto) {
+// Comandos propios de esta página. Devuelve false si no es uno de ellos.
+async function comandoPagina(texto) {
   const orden = texto.trim().replace(/;$/, '').trim().toLowerCase().replace('ó', 'o');
   let m;
-  if (orden === 'ayuda' || orden === 'help') return escribir(AYUDA);
-  if (/^glosario\b/.test(orden)) return escribir(GLOSARIO(texto.trim().replace(/;$/, '').slice(8)), 'nota');
-  if (orden === 'retos') return escribir(RETOS.map((r, i) => `${r.sem !== RETOS[i - 1]?.sem ? `\n${r.sem ? 'Semana ' + r.sem + ': ' : ''}${SEMANAS[r.sem]}\n` : ''}${hechos.has(r.titulo) ? '*' : ' '} ${String(i + 1).padStart(2)}. ${r.titulo}`).join('\n') + '\n(* = resuelto)\n');
-  if ((m = orden.match(/^semana\s+(\d+)$/))) {
+  if (orden === 'ayuda' || orden === 'help') escribir(AYUDA);
+  else if (/^glosario\b/.test(orden)) escribir(GLOSARIO(texto.trim().replace(/;$/, '').slice(8)), 'nota');
+  else if (orden === 'retos') escribir(RETOS.map((r, i) => `${r.sem !== RETOS[i - 1]?.sem ? `\n${r.sem ? 'Semana ' + r.sem + ': ' : ''}${SEMANAS[r.sem]}\n` : ''}${hechos.has(r.titulo) ? '*' : ' '} ${String(i + 1).padStart(2)}. ${r.titulo}`).join('\n') + '\n(* = resuelto)\n');
+  else if ((m = orden.match(/^semana\s+(\d+)$/))) {
     const i = RETOS.findIndex(r => r.sem === Number(m[1]));
-    return i < 0 ? escribir('Hay semanas de consultas de la 1 a la 6.', 'error') : abrir(i);
+    if (i < 0) escribir('Hay semanas de consultas de la 1 a la 6.', 'error'); else abrir(i);
   }
-  if ((m = orden.match(/^reto\s+(\d+)$/))) return abrir(Number(m[1]) - 1);
-  if (orden === 'siguiente') return abrir((actual + 1) % RETOS.length);
-  if (orden === 'comprobar') return comprobar();
-  if (orden === 'pista' || orden === 'solucion') {
-    if (!RETOS[actual]) return escribir('Primero abre un reto: RETO 1', 'error');
-    return escribir(orden === 'pista' ? RETOS[actual].pista : RETOS[actual].sql + ';', 'info nota');
+  else if ((m = orden.match(/^reto\s+(\d+)$/))) abrir(Number(m[1]) - 1);
+  else if (orden === 'siguiente') abrir((actual + 1) % RETOS.length);
+  else if (orden === 'comprobar') await comprobar();
+  else if (orden === 'pista' || orden === 'solucion') {
+    if (!RETOS[actual]) escribir('Primero abre un reto: RETO 1', 'error');
+    else escribir(orden === 'pista' ? RETOS[actual].pista : RETOS[actual].sql + ';', 'info nota');
   }
-  if (orden === 'tablas') return tablas();
-  if (orden === 'clear' || orden === 'cls' || orden === 'clear screen') return $('salida').replaceChildren();
-  if (MOTOR.simular) {
-    if (orden === 'reiniciar') { const r = await pedir({ reiniciar: true }); ultima = ''; return r.error ? escribir(r.error, 'error nota') : escribir(r.mensaje, 'bien'); }
-    if (orden === 'show user') return escribir('USER es "TIOSAM"\n');
-    if (orden.startsWith('set ')) return;
+  else if (orden === 'tablas') await tablas();
+  else if (['clear', 'cls', 'clear screen', 'clear scr'].includes(orden)) $('salida').replaceChildren();
+  else if (MOTOR.simular && orden === 'reiniciar') {
+    const r = await pedir({ reiniciar: true }); ultima = '';
+    if (r.error) escribir(r.error, 'error nota'); else escribir(r.mensaje, 'bien');
   }
-  // En el simulador se pueden pegar varias sentencias juntas
-  const lote = MOTOR.simular ? MOTOR.sentencias(texto) : [texto.replace(/\n\s*\/\s*$/, '').trim()];
-  for (const sql of lote) {
-    const res = await pedir({ sql });
-    if (res.error) escribir('\nERROR:\n' + res.error + '\n', 'error nota');
-    else if (res.mensaje) escribir(res.mensaje);
-    else { if (!/^desc/i.test(sql)) ultima = sql; tabla(res); }
-    $('terminal').scrollTop = $('terminal').scrollHeight;
-  }
+  else return false;
+  return true;
 }
 
-const COMANDO = /^\s*(glosario(\s+[^;\n]+)?|ayuda|help|retos|reto\s+\d+|semana\s+\d+|siguiente|comprobar|pista|soluci[oó]n|tablas|clear( screen)?|cls|commit|rollback|reiniciar|show user|set\s+\w+.*|desc(ribe)?\s+\w+)\s*;?\s*$/i;
+// Una unidad: comando, sentencia SQL o bloque PL/SQL
+async function unidad(u) {
+  if (u.tipo === 'cmd') {
+    if (await comandoPagina(u.texto) || await SP.comando(u.texto)) return;
+    return SP.sql(u.texto.replace(/;\s*$/, ''));
+  }
+  return SP.sql(u.texto, u.tipo);
+}
+
+async function procesar(texto, forzar) {
+  const p = SP.partir(texto);
+  if (p.resto.trim()) {
+    if (forzar) p.unidades.push({ tipo: p.plsql ? 'plsql' : 'sql', texto: p.resto });
+    else SP.guardarBuffer(p.resto);   // línea en blanco o punto: queda en el buffer
+  }
+  for (const u of p.unidades) await unidad(u);
+}
+
+// Pregunta algo y espera la siguiente línea (&variable, ACCEPT)
+let respuesta = null;
+function preguntar(pregunta) {
+  return new Promise(resolver => {
+    respuesta = resolver;
+    $('linea').value = ''; $('linea').rows = 1; $('prompt').textContent = pregunta; $('linea').focus();
+    $('terminal').scrollTop = $('terminal').scrollHeight;
+  });
+}
+
+function contestar(valor) {
+  const resolver = respuesta;
+  escribir($('prompt').textContent + (valor ?? '^C'));
+  respuesta = null; $('linea').value = ''; ajustar(); guardar();
+  resolver(valor);
+}
+
+SP.iniciar({
+  escribir, preguntar, unidad,
+  consulta: sql => { ultima = sql; },
+  limpiar: () => $('salida').replaceChildren(),
+  editar: texto => setTimeout(() => { $('linea').value = texto; ajustar(); guardar(); $('linea').focus(); }),
+  elegirArchivo: () => new Promise(resolver => {
+    const campo = document.createElement('input');
+    campo.type = 'file'; campo.accept = '.sql,.txt';
+    campo.onchange = () => campo.files[0] ? campo.files[0].text().then(resolver) : resolver(null);
+    campo.oncancel = () => resolver(null);
+    campo.click();
+  }),
+  descargar: (nombre, texto) => {
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(new Blob([texto], { type: 'text/plain' }));
+    enlace.download = nombre; enlace.click();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+    escribir('archivo descargado: ' + nombre);
+  },
+});
 
 function ajustar() {
   const t = $('linea'), n = t.value.split('\n').length;
   t.rows = n;
+  if (respuesta) return;
   $('prompt').textContent = ['SQL>', ...Array.from({ length: n - 1 }, (_, i) => String(i + 2).padStart(3) + ' ')].join('\n');
 }
 
@@ -215,12 +261,17 @@ $('linea').addEventListener('keydown', async e => {
     e.preventDefault();
     return sangria(e.shiftKey);
   }
+  if (respuesta && (e.key === 'Enter' || e.key === 'Escape')) {
+    e.preventDefault();
+    return contestar(e.key === 'Enter' ? t.value : null);
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     const texto = t.value;
-    // Como en SQL*Plus: sigue pidiendo líneas hasta ; o / (una línea vacía cancela)
-    const vacia = texto.includes('\n') && /\n[ \t]*$/.test(texto);
-    const lista = e.ctrlKey || !texto.trim() || COMANDO.test(texto) || /;\s*(--.*)?$/.test(texto) || /\n\s*\/\s*$/.test(texto);
-    if (!lista && !vacia) return;
+    // Como en SQL*Plus: sigue pidiendo líneas hasta ; o / (una línea vacía o un punto no ejecutan)
+    const partes = SP.partir(texto);
+    const dejar = (!partes.plsql && texto.includes('\n') && /\n[ \t]*$/.test(texto)) || /\n[ \t]*\.[ \t]*$/.test(texto);
+    const lista = e.ctrlKey || !partes.resto.trim();
+    if (!lista && !dejar) return;
     e.preventDefault();
     if (ocupado) return;
     escribir($('prompt').textContent.split('\n').map((p, i) => p + ' ' + (texto.split('\n')[i] ?? '')).join('\n'));
@@ -228,7 +279,10 @@ $('linea').addEventListener('keydown', async e => {
     if (texto.trim()) {
       historial.push(texto.trimEnd()); historial.splice(0, historial.length - 100); pos = historial.length;
       localStorage.setItem('hr-historial', JSON.stringify(historial));
-      if (lista) { ocupado = true; await procesar(texto); ocupado = false; }
+      ocupado = true;
+      try { await procesar(texto, e.ctrlKey && !dejar); }
+      catch (error) { escribir('ERROR: ' + error.message, 'error nota'); }
+      finally { ocupado = false; }
     }
     $('terminal').scrollTop = $('terminal').scrollHeight;
   } else if (e.key === 'Escape') {

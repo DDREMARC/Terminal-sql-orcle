@@ -133,6 +133,10 @@
     });
     s = anidadas(s);
     if (/^\s*(create|alter|drop)\b/i.test(s)) s = ddl(s);
+    // en MERGE, PostgreSQL no admite alias.columna a la izquierda del SET ni en las columnas del INSERT
+    if (/^\s*merge\b/i.test(s)) s = s
+      .replace(/(\bupdate\s+set\b)([\s\S]*?)(?=\bwhen\b|$)/gi, (t, a, b) => `${a} ${partir(b.trim()).map(x => x.replace(/^\w+\./, '')).join(', ')} `)
+      .replace(/(\binsert\s*\()([^)]*)\)/gi, (t, a, b) => `${a}${b.replace(/\b\w+\./g, '')})`);
     s = s.replace(/^(\s*delete)\s+(?!from\b)(?=\w)/i, '$1 FROM ')
       .replace(/\b(\w+)\.nextval\b/gi, "nextval('$1')")
       .replace(/\b(\w+)\.currval\b/gi, "currval('$1')");
@@ -142,6 +146,69 @@
       .replace(/\bnumber\b(?=\s*[(),])/gi, 'numeric')
       .replace(/\bsubstr\s*\(/gi, 'ora_substr(');
     return restaurar(s);
+  }
+
+  const esBloque = sql => /^\s*(declare|begin)\b/i.test(proteger(sql).limpio);
+
+  // Bloque PL/SQL -> DO de PL/pgSQL. Las variables bind entran y salen del bloque.
+  function traducirBloque(sql, binds = {}) {
+    // primero funciones de SQL (NVL, DECODE...), después lo propio de PL/SQL
+    const { limpio, restaurar } = proteger(traducir(sql.replace(/\n\s*\/\s*$/, '')));
+    let s = limpio.trim();
+    if (!s.endsWith(';')) s += ';';
+    const usados = [];
+    s = s.replace(/(?<![:\w]):([a-z_]\w*)/gi, (t, n) => {
+      n = n.toLowerCase();
+      if (!binds[n]) throw new Error(`SP2-0552: variable bind "${n.toUpperCase()}" no declarada`);
+      if (!usados.includes(n)) usados.push(n);
+      return `b__${n}`;
+    });
+    const confirma = /\bcommit\s*;/i.test(s);
+    // PL/pgSQL no tiene cursor%ROWTYPE: se usa record
+    for (const [, c] of s.matchAll(/\bcursor\s+(\w+)\s+is\b/gi)) s = s.replace(new RegExp(`\\b${c}%rowtype\\b`, 'gi'), 'record');
+    s = s.replace(/\bcommit\s*;/gi, 'NULL;')
+      .replace(/\bnumber\b/gi, 'numeric')
+      .replace(/\b(pls_integer|binary_integer|simple_integer)\b/gi, 'integer')
+      .replace(/\bclob\b/gi, 'text')
+      .replace(/\b(\w+\s+(?:constant\s+)?)date\b(?=\s*(?:;|:=|not\b|default\b))/gi, '$1timestamp(0)')
+      .replace(/\bzero_divide\b/gi, 'division_by_zero')
+      .replace(/\bdup_val_on_index\b/gi, 'unique_violation')
+      .replace(/\b(value_error|invalid_number)\b/gi, 'data_exception')
+      .replace(/\b\w+%notfound\b/gi, '(NOT FOUND)')
+      .replace(/\b\w+%found\b/gi, 'FOUND')
+      .replace(/\bcursor\s+(\w+)\s+is\b/gi, '$1 CURSOR FOR')
+      .replace(/\bin\s+reverse\s+([^;]+?)\s*\.\.\s*([^;]+?)\s+loop\b/gi, 'IN REVERSE $2..$1 LOOP')
+      // SELECT ... INTO debe fallar si no hay filas o hay varias, como en Oracle
+      .replace(/((?:^|;|\bbegin|\bthen|\belse|\bloop)\s*select\b(?:(?!\bloop\b)[^;])*?\binto\s+)/gi, '$1STRICT ');
+    s = llamadas(s, 'dbms_output\\.put_line', a => `RAISE NOTICE '%', coalesce((${a.join(', ')})::text, ' ')`);
+    s = s.replace(/\bdbms_output\.new_line\b(\s*\(\s*\))?/gi, "RAISE NOTICE '%', ' '");
+    s = llamadas(s, 'raise_application_error', a => `RAISE EXCEPTION 'ORA-%: %', abs(${a[0]}), ${a[1]}`);
+    // las variables de FOR r IN (SELECT ...) hay que declararlas
+    const registros = [...new Set([...s.matchAll(/\bfor\s+(\w+)\s+in\s*\(?\s*select\b/gi)].map(m => m[1].toLowerCase()))];
+    if (registros.length) {
+      const decl = registros.map(r => `${r} record;`).join(' ');
+      s = /^declare\b/i.test(s) ? s.replace(/^declare\b/i, `DECLARE ${decl}`) : `DECLARE ${decl} ${s}`;
+    }
+    const texto = v => v === null || v === '' ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
+    const declaran = usados.map(n => `b__${n} ${binds[n].tipo} := ${texto(binds[n].valor)};`).join(' ');
+    const devuelven = usados.map(n => `PERFORM set_config('bind.${n}', coalesce(b__${n}::text, ''), false);`).join(' ');
+    return { codigo: `DO $plsql$ ${declaran ? 'DECLARE ' + declaran : ''} BEGIN\n${restaurar(s)}\n${devuelven} END $plsql$`, usados, confirma };
+  }
+
+  async function bloque(db, cuerpo) {
+    const salida = [];
+    const { codigo, usados, confirma } = traducirBloque(cuerpo.sql, cuerpo.binds);
+    const inicio = performance.now();
+    try {
+      await protegido(db, false, () => db.exec(codigo, { onNotice: n => salida.push(n.message) }));
+    } catch (e) { return { error: ERRORES.simulador(e), salida }; }
+    const binds = {};
+    for (const n of usados) {
+      const v = (await db.query('SELECT current_setting($1, true) AS v', [`bind.${n}`])).rows[0].v || null;
+      binds[n] = v !== null && cuerpo.binds[n].tipo === 'numeric' ? String(Number(v)) : v;
+    }
+    if (confirma) await cerrarTx(db, 'COMMIT');
+    return { mensaje: '\nProcedimiento PL/SQL terminado correctamente.\n', salida, binds, ms: Math.round(performance.now() - inicio) };
   }
 
   // Separa un texto con varias sentencias (por ; o por / en una línea sola)
@@ -210,6 +277,25 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
     return t;
   }
 
+  // Oracle titula una columna sin alias con la expresión escrita: COUNT(*), PRECIO*2
+  function titulos(sql, campos) {
+    const { limpio, restaurar } = proteger(sql);
+    const ini = /^\s*select\s+(?:(?:distinct|all|unique)\s+)?/i.exec(limpio);
+    let items = [];
+    if (ini) {
+      let nivel = 0, fin = ini[0].length;
+      for (; fin < limpio.length; fin++) {
+        if (limpio[fin] === '(') nivel++;
+        else if (limpio[fin] === ')') nivel--;
+        else if (!nivel && /^\bfrom\b/i.test(limpio.slice(fin)) && !/\w/.test(limpio[fin - 1])) break;
+      }
+      items = partir(limpio.slice(ini[0].length, fin));
+    }
+    const sirve = items.length === campos.length && !items.some(x => x === '*' || x.endsWith('.*'));
+    return campos.map((c, i) => sirve && (c.name === '?column?' || c.name === 'case' || items[i].endsWith(')'))
+      ? restaurar(items[i]).replace(/\s+/g, '').toUpperCase() : c.name.toUpperCase());
+  }
+
   // ---------- Ejecución con transacciones como en Oracle ----------
   let abierta = false;
   async function abrirTx(db) { if (!abierta) { await db.exec('BEGIN'); abierta = true; } }
@@ -244,6 +330,9 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
         return r;
       });
     }
+    if (esBloque(cuerpo.sql)) return bloque(db, cuerpo);
+    if (/^\s*create(\s+or\s+replace)?\s+(procedure|function|trigger|package)\b/i.test(proteger(cuerpo.sql).limpio))
+      return { error: 'ORA-00900: el simulador aún no crea procedimientos, funciones, triggers ni paquetes' };
     const sql = sentencias(cuerpo.sql)[0];
     if (!sql) return { error: 'Escribe una sentencia.' };
     const verbo = /^[\s(]*(\w+)/.exec(sql)?.[1].toLowerCase();
@@ -277,10 +366,16 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
       const inicio = performance.now();
       const r = await protegido(db, true, () => consultar(traducir(sql)));
       return {
-        columnas: r.fields.map(f => f.name.toUpperCase()),
-        filas: r.rows.slice(0, 200).map(f => f.map((v, i) => formato(v, r.fields[i].dataTypeID))),
+        columnas: titulos(sql, r.fields),
+        filas: r.rows.slice(0, 5000).map(f => f.map((v, i) => formato(v, r.fields[i].dataTypeID))),
         ms: Math.round(performance.now() - inicio),
       };
+    }
+    // el contador de PGlite no incluye MERGE: se cuenta dentro de un bloque
+    if (verbo === 'merge') {
+      await protegido(db, false, () => db.exec(`DO $merge$ DECLARE n bigint; BEGIN ${traducir(sql)}; GET DIAGNOSTICS n = ROW_COUNT; PERFORM set_config('merge.filas', n::text, false); END $merge$`));
+      const n = Number((await db.query("SELECT current_setting('merge.filas') AS n")).rows[0].n);
+      return { mensaje: filasMsg(n, 'fusionada') };
     }
     if (['insert', 'update', 'delete'].includes(verbo)) {
       const r = await protegido(db, false, () => db.query(traducir(sql)));
@@ -299,7 +394,8 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
       const hecho = { create: 'cread', alter: 'modificad', drop: 'borrad' }[verbo] + g;
       return { mensaje: `\n${nombre} ${hecho}.\n` };
     }
-    return { error: 'ORA-00900: sentencia SQL no válida\n(el simulador no ejecuta bloques PL/SQL ni GRANT)' };
+    if (verbo === 'grant' || verbo === 'revoke') return { error: 'ORA-00900: el simulador no ejecuta GRANT ni REVOKE' };
+    return { error: `SP2-0734: comando desconocido que empieza por "${sql.slice(0, 10)}..." - se ignora el resto.` };
   }
 
   // Vuelve a un SAVEPOINT del usuario sin perder la transacción si no existe
@@ -323,6 +419,6 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
     return turno;
   }
 
-  window.MOTOR = { simular, sentencias, pedir: simular ? simulado : oracle };
+  window.MOTOR = { simular, sentencias, proteger, pedir: simular ? simulado : oracle };
   if (simular) base().catch(() => {});
 })();
