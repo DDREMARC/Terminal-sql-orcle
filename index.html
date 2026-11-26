@@ -14,7 +14,9 @@
   .error{color:#ff8a80}.bien{color:#7ee787}.info{color:#f2cc60}
   .entrada{display:flex}
   #prompt{color:#eee;text-align:right;min-width:5ch;padding-right:1ch;white-space:pre}
-  textarea{flex:1;background:transparent;color:#fff;border:0;outline:0;resize:none;padding:0;font:inherit;overflow-x:auto;white-space:pre}
+  /* sin barra de scroll: en una sola línea tapaba el texto; el cursor sigue desplazando */
+  textarea{flex:1;min-width:0;background:transparent;color:#fff;border:0;outline:0;resize:none;padding:0;font:inherit;overflow-x:auto;white-space:pre;scrollbar-width:none}
+  textarea::-webkit-scrollbar{display:none}
 </style>
 </head>
 <body>
@@ -26,6 +28,7 @@
 <script src="datos.js?v=6"></script>
 <script src="errores.js?v=6"></script>
 <script src="motor.js?v=6"></script>
+<script src="glosario.js?v=7"></script>
 <script src="retos-tiosam.js"></script>
 <script src="retos-tiosam-semanas.js"></script>
 <script>
@@ -69,6 +72,7 @@ Una consulta termina en ;  (o con / en una línea sola). Enter sin ; sigue en la
   PISTA        ayuda del reto        SOLUCION     muestra la respuesta
   TABLAS       tablas disponibles    DESC tabla   columnas de una tabla
   CLEAR        limpia la pantalla
+  GLOSARIO     todos los términos    GLOSARIO nvl   GLOSARIO semana 4
   Solo en modo simulado:
   INSERT, UPDATE, DELETE, COMMIT, ROLLBACK, SAVEPOINT, CREATE, ALTER, DROP, TRUNCATE
   REINICIAR    borra tus cambios y vuelve a los datos originales
@@ -112,6 +116,7 @@ async function procesar(texto) {
   const orden = texto.trim().replace(/;$/, '').trim().toLowerCase().replace('ó', 'o');
   let m;
   if (orden === 'ayuda' || orden === 'help') return escribir(AYUDA);
+  if (/^glosario\b/.test(orden)) return escribir(GLOSARIO(texto.trim().replace(/;$/, '').slice(8)), 'nota');
   if (orden === 'retos') return escribir(RETOS.map((r, i) => `${r.sem !== RETOS[i - 1]?.sem ? `\n${r.sem ? 'Semana ' + r.sem + ': ' : ''}${SEMANAS[r.sem]}\n` : ''}${hechos.has(r.titulo) ? '*' : ' '} ${String(i + 1).padStart(2)}. ${r.titulo}`).join('\n') + '\n(* = resuelto)\n');
   if ((m = orden.match(/^semana\s+(\d+)$/))) {
     const i = RETOS.findIndex(r => r.sem === Number(m[1]));
@@ -142,7 +147,7 @@ async function procesar(texto) {
   }
 }
 
-const COMANDO = /^\s*(ayuda|help|retos|reto\s+\d+|semana\s+\d+|siguiente|comprobar|pista|soluci[oó]n|tablas|clear( screen)?|cls|commit|rollback|reiniciar|show user|set\s+\w+.*|desc(ribe)?\s+\w+)\s*;?\s*$/i;
+const COMANDO = /^\s*(glosario(\s+[^;\n]+)?|ayuda|help|retos|reto\s+\d+|semana\s+\d+|siguiente|comprobar|pista|soluci[oó]n|tablas|clear( screen)?|cls|commit|rollback|reiniciar|show user|set\s+\w+.*|desc(ribe)?\s+\w+)\s*;?\s*$/i;
 
 function ajustar() {
   const t = $('linea'), n = t.value.split('\n').length;
@@ -180,7 +185,7 @@ $('linea').addEventListener('keydown', async e => {
 });
 $('terminal').addEventListener('click', () => { if (!String(getSelection())) $('linea').focus(); });
 
-escribir('SQL*Plus (práctica) · El Tío Sam · escribe TABLAS para verlas.\nEscribe AYUDA para ver los comandos.', 'nota');
+escribir('SQL*Plus (práctica) · El Tío Sam · escribe TABLAS para verlas.\nEscribe AYUDA para ver los comandos o GLOSARIO para los términos.', 'nota');
 if (MOTOR.simular) {
   $('modo').textContent = 'SQL*Plus · práctica (Oracle SIMULADO)';
   escribir('Modo simulado: corre en tu navegador con datos de ejemplo. La primera consulta tarda unos segundos.\nLos mensajes de error pueden variar frente a Oracle real.', 'nota');
