@@ -78,6 +78,7 @@ Una consulta termina en ;  (o con / en una línea sola). Enter sin ; sigue en la
   REINICIAR    borra tus cambios y vuelve a los datos originales
   Flechas arriba/abajo: historial.   Esc: borra lo que escribes.
   Ctrl+Z deshace lo escrito.         Ctrl+Y o Ctrl+Shift+Z rehace.
+  Tab pone sangría.                  Shift+Tab la quita.
 `;
 
 function abrir(i) {
@@ -177,6 +178,22 @@ function mover(d) {
   t.value = p.v; ajustar(); t.setSelectionRange(p.i, p.i);
 }
 
+// Tab pone 4 espacios; con varias líneas marcadas sangra todas. Shift+Tab quita.
+function sangria(quitar) {
+  const t = $('linea'), v = t.value, a = t.selectionStart, b = t.selectionEnd;
+  if (!quitar && !v.slice(a, b).includes('\n')) t.setRangeText('    ', a, b, 'end');
+  else {
+    const ini = v.slice(0, a).lastIndexOf('\n') + 1;
+    let fin = v.indexOf('\n', b > a && v[b - 1] === '\n' ? b - 1 : b);
+    if (fin < 0) fin = v.length;
+    const viejo = v.slice(ini, fin);
+    const nuevo = viejo.split('\n').map(l => quitar ? l.replace(/^( {1,4}|\t)/, '') : '    ' + l).join('\n');
+    t.setRangeText(nuevo, ini, fin, 'select');
+    if (a === b) { const p = Math.max(ini, a - (viejo.length - nuevo.length)); t.setSelectionRange(p, p); }
+  }
+  ajustar(); guardar();
+}
+
 $('linea').addEventListener('input', e => {
   ajustar();
   const tipo = e.inputType || '';
@@ -193,6 +210,10 @@ $('linea').addEventListener('keydown', async e => {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (tecla === 'z' || tecla === 'y')) {
     e.preventDefault();
     return mover(tecla === 'z' && !e.shiftKey ? -1 : 1);
+  }
+  if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    return sangria(e.shiftKey);
   }
   if (e.key === 'Enter' && !e.shiftKey) {
     const texto = t.value;
