@@ -1,4 +1,4 @@
-// Tablas y datos de ejemplo para el simulador (tomados de sql/tio_sam_oracle.sql)
+// Tablas y datos de ejemplo para el simulador (base: sql/tio_sam_oracle.sql, ampliados a 10 o más filas por tabla)
 window.DATOS_SQL = `
 CREATE SEQUENCE seq_menu_platos;
 CREATE TABLE menu_platos (
@@ -121,4 +121,55 @@ INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES 
 INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (1,'Efectivo',56,'Pagado');
 INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (2,'Yape/Plin',27,'Pagado');
 INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (3,'Tarjeta',112,'Pendiente');
+INSERT INTO clientes (codigo,nombre,dni,telefono,email,direccion) VALUES ('C-006','Pedro Salas Gutiérrez','08765432','913 902 456','pedro.salas@gmail.com','Av. La Marina 980, San Miguel');
+INSERT INTO clientes (codigo,nombre,dni,telefono,email,direccion) VALUES ('C-007','Ana Castillo León','46120987','900 100 007','ana.castillo@outlook.com','Av. Brasil 1500, Jesús María');
+INSERT INTO clientes (codigo,nombre,dni,telefono,email,direccion) VALUES ('C-008','Miguel Ramos Ortiz','42987610','900 100 008','miguel.ramos@hotmail.com','Jr. Cusco 320, Cercado de Lima');
+INSERT INTO clientes (codigo,nombre,dni,telefono,email,direccion) VALUES ('C-009','Elena Vargas Soto','07654128','900 100 009','elena.vargas@yahoo.es','Av. Aviación 2400, San Borja');
+INSERT INTO clientes (codigo,nombre,dni,telefono,email,direccion) VALUES ('C-010','Raúl Paredes Luna','44518203','900 100 010','raul.paredes@gmail.com','Calle Las Begonias 210, San Isidro');
+INSERT INTO empleados (codigo,nombre,dni,telefono,cargo,sueldo) VALUES ('E-005','Rubén Choy Vargas','43210987','900 200 005','Mozo',1300);
+INSERT INTO empleados (codigo,nombre,dni,telefono,cargo,sueldo) VALUES ('E-006','Lian Zhang Rojas','41872365','900 200 006','Cocinero',1800);
+INSERT INTO empleados (codigo,nombre,dni,telefono,cargo,sueldo) VALUES ('E-007','Carmen Rojas Vega','46781230','900 200 007','Cajero',1450);
+INSERT INTO empleados (codigo,nombre,dni,telefono,cargo,sueldo) VALUES ('E-008','Jorge Lau Medina','08123459','900 200 008','Mozo',1200);
+INSERT INTO empleados (codigo,nombre,dni,telefono,cargo,sueldo) VALUES ('E-009','Sofía Aguilar Chávez','47012398','900 200 009','Cocinero',2100);
+INSERT INTO empleados (codigo,nombre,dni,telefono,cargo,sueldo) VALUES ('E-010','Fernando Díaz Molina','40987123','900 200 010','Administrador',2400);
+INSERT INTO usuarios (usuario,clave,rol,cliente_id) VALUES ('jorge.huaman','****','Cliente',2);
+INSERT INTO usuarios (usuario,clave,rol,cliente_id) VALUES ('rosa.delgado','****','Cliente',3);
+INSERT INTO usuarios (usuario,clave,rol,cliente_id) VALUES ('carlos.mendoza','****','Cliente',4);
+INSERT INTO usuarios (usuario,clave,rol,cliente_id) VALUES ('lucia.torres','****','Cliente',5);
+INSERT INTO usuarios (usuario,clave,rol,empleado_id) VALUES ('daniela.p','****','Empleado',2);
+INSERT INTO usuarios (usuario,clave,rol,empleado_id) VALUES ('ruben.c','****','Empleado',5);
+INSERT INTO usuarios (usuario,clave,rol,empleado_id) VALUES ('carmen.r','****','Empleado',7);
+INSERT INTO mesas (numero,capacidad,zona,estado) VALUES (6,2,'Salón','Libre');
+INSERT INTO mesas (numero,capacidad,zona,estado) VALUES (7,4,'Terraza','Ocupada');
+INSERT INTO mesas (numero,capacidad,zona,estado) VALUES (8,6,'Terraza','Libre');
+INSERT INTO mesas (numero,capacidad,zona,estado) VALUES (9,10,'Privado','Reservada');
+INSERT INTO mesas (numero,capacidad,zona,estado) VALUES (10,4,'Salón','Libre');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (6,5,2,'Mesa','Entregado');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (1,3,NULL,'Delivery','Entregado');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (7,2,6,'Mesa','Entregado');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (8,7,NULL,'Para llevar','Cancelado');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (1,5,7,'Mesa','Pendiente');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (9,3,NULL,'Delivery','Entregado');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (2,8,5,'Mesa','En cocina');
+INSERT INTO pedidos (cliente_id,empleado_id,mesa_id,modalidad,estado) VALUES (6,2,NULL,'Para llevar','Entregado');
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (5,2,2,26);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (5,8,1,9);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (6,1,1,22);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (6,9,2,6);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (7,4,1,29);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (7,10,2,8);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (8,5,1,27);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (9,3,2,23);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (9,11,1,10);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (10,1,2,22);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (10,7,1,12);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (11,5,2,27);
+INSERT INTO detalle_pedido (pedido_id,plato_id,cantidad,precio_unitario) VALUES (12,8,2,9);
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (5,'Tarjeta',61,'Pagado');
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (6,'Efectivo',34,'Pagado');
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (7,'Yape/Plin',45,'Pagado');
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (8,'Efectivo',27,'Anulado');
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (10,'Tarjeta',56,'Pagado');
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (11,'Yape/Plin',54,'Pendiente');
+INSERT INTO pagos (pedido_id,metodo,monto,estado) VALUES (12,'Efectivo',18,'Pagado');
 `;
