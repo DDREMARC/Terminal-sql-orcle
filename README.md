@@ -1,0 +1,20 @@
+# Terminal SQL Oracle (práctica)
+
+Terminal en el navegador, estilo SQL*Plus, para practicar consultas sobre la base del chifa **El Tío Sam**.
+Ejecuta las consultas en un Oracle real local. Solo permite `SELECT` y `DESC`, y solo desde la misma PC.
+
+## Requisitos
+- Oracle XE (probado en 11.2)
+- XAMPP (Apache + PHP 8) con la extensión `oci8`
+- Las 8 tablas del Tío Sam creadas: ver el repo [base-de-datos-final-semana16](https://github.com/DDREMARC/base-de-datos-final-semana16), carpeta `sql/`
+
+## Instalar
+1. Copia esta carpeta en `C:\xampp\htdocs\`.
+2. Copia `config.example.php` como `config.php` y pon tu usuario y clave de Oracle.
+3. Enciende Apache y Oracle.
+4. Abre `http://localhost/Terminal-sql-orcle/`.
+
+## Comandos
+`AYUDA`, `RETOS`, `RETO 3`, `SEMANA 4`, `COMPROBAR`, `PISTA`, `SOLUCION`, `SIGUIENTE`, `TABLAS`, `DESC tabla`, `CLEAR`.
+
+Los resultados de los retos dependen de los datos cargados en tu base.

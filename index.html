@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQL*Plus · práctica</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;display:flex;flex-direction:column;background:#0c0c0c;color:#ccc;font:16px/1.35 Consolas,"Cascadia Mono",monospace}
+  header{background:#202020;color:#eee;padding:6px 12px;display:flex;justify-content:space-between;gap:10px;font:13px "Segoe UI",sans-serif;border-bottom:1px solid #333}
+  #terminal{flex:1;overflow:auto;padding:10px 14px}
+  pre{margin:0;font:inherit;white-space:pre}
+  .nota{white-space:pre-wrap}
+  .error{color:#ff8a80}.bien{color:#7ee787}.info{color:#f2cc60}
+  .entrada{display:flex}
+  #prompt{color:#eee;text-align:right;min-width:5ch;padding-right:1ch;white-space:pre}
+  textarea{flex:1;background:transparent;color:#fff;border:0;outline:0;resize:none;padding:0;font:inherit;overflow-x:auto;white-space:pre}
+</style>
+</head>
+<body>
+<header><span>SQL*Plus · práctica (Oracle XE local)</span><span id="barra"></span></header>
+<main id="terminal">
+  <div id="salida" role="log" aria-live="polite"></div>
+  <div class="entrada"><pre id="prompt" aria-hidden="true">SQL&gt;</pre><textarea id="linea" rows="1" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus aria-label="Línea de comandos SQL"></textarea></div>
+</main>
+<script src="retos-tiosam.js"></script>
+<script src="retos-tiosam-semanas.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const leer = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const hechos = new Set(leer('hr-hechos', []));
+const historial = leer('hr-historial', []);
+let actual = -1, ultima = '', pos = historial.length, ocupado = false;
+
+async function pedir(cuerpo) {
+  try {
+    const r = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Practica': '1' }, body: JSON.stringify(cuerpo) });
+    return await r.json();
+  } catch {
+    return { error: 'ORA-12541: sin respuesta. Revisa que Apache y Oracle estén encendidos.' };
+  }
+}
+
+function escribir(texto, clase = '') {
+  const p = document.createElement('pre');
+  p.textContent = texto;
+  p.className = clase;
+  $('salida').append(p);
+}
+
+// Tabla al estilo SQL*Plus: números a la derecha, guiones bajo el título
+function tabla(res) {
+  const filas = res.filas.map(f => f.map(v => v ?? ''));
+  const esNum = res.columnas.map((_, i) => filas.some(f => f[i] !== '') && filas.every(f => f[i] === '' || /^-?\d*\.?\d+$/.test(f[i])));
+  const ancho = res.columnas.map((c, i) => Math.max(c.length, ...filas.map(f => f[i].length)));
+  const celda = (v, i) => esNum[i] ? v.padStart(ancho[i]) : v.padEnd(ancho[i]);
+  if (!filas.length) return escribir('\nninguna fila seleccionada\n');
+  const n = filas.length === 1 ? '1 fila seleccionada.' : filas.length + ' filas seleccionadas.';
+  escribir(['', res.columnas.map(celda).join(' '), ancho.map(a => '-'.repeat(a)).join(' '),
+    ...filas.map(f => f.map(celda).join(' ')), '', n, ''].join('\n'));
+}
+
+function barra() {
+  $('barra').textContent = `${actual < 0 ? 'sin reto' : 'reto ' + (actual + 1)} · resueltos ${RETOS.filter(r => hechos.has(r.titulo)).length}/${RETOS.length} · escribe AYUDA`;
+}
+
+const AYUDA = `
+Una consulta termina en ;  (o con / en una línea sola). Enter sin ; sigue en la línea siguiente.
+
+  RETOS        lista por semana      SEMANA 3   salta a esa semana
+  RETO 3       abre el reto 3        SIGUIENTE    pasa al próximo
+  COMPROBAR    revisa tu última consulta
+  PISTA        ayuda del reto        SOLUCION     muestra la respuesta
+  TABLAS       tablas disponibles    DESC tabla   columnas de una tabla
+  CLEAR        limpia la pantalla
+  Flechas arriba/abajo: historial.   Esc: borra lo que escribes.
+`;
+
+function abrir(i) {
+  if (!RETOS[i]) return escribir(`No existe. Hay retos del 1 al ${RETOS.length}.`, 'error');
+  actual = i; ultima = '';
+  const r = RETOS[i];
+  escribir(`\nRETO ${i + 1}: ${r.titulo}  [${r.tema}]\n${r.texto}\nColumnas: ${r.columnas}\n`, 'info nota');
+  barra();
+}
+
+async function comprobar() {
+  const r = RETOS[actual];
+  if (!r) return escribir('Primero abre un reto: RETO 1', 'error');
+  if (!ultima) return escribir('Primero ejecuta tu consulta y luego escribe COMPROBAR.', 'error');
+  const [mio, bueno] = await Promise.all([pedir({ sql: ultima }), pedir({ sql: r.sql })]);
+  const mal = t => escribir(t, 'error nota');
+  if (mio.error) return mal(mio.error);
+  if (bueno.error) return mal('Falló la consulta de referencia: ' + bueno.error);
+  if (mio.columnas.length !== bueno.columnas.length) return mal(`Casi. Se piden ${bueno.columnas.length} columnas y devolviste ${mio.columnas.length}.`);
+  if (mio.filas.length !== bueno.filas.length) return mal(`Aún no. Se esperan ${bueno.filas.length} fila(s) y salieron ${mio.filas.length}.`);
+  const a = mio.filas.map(f => JSON.stringify(f)), b = bueno.filas.map(f => JSON.stringify(f));
+  if ([...a].sort().join('\n') !== [...b].sort().join('\n')) return mal('Aún no. Hay valores distintos. Revisa también el orden de las columnas.');
+  if (r.orden && a.join('\n') !== b.join('\n')) return mal('Las filas son correctas, pero el orden no. Revisa tu ORDER BY.');
+  hechos.add(r.titulo);
+  localStorage.setItem('hr-hechos', JSON.stringify([...hechos]));
+  barra();
+  escribir('¡Correcto! Escribe SIGUIENTE para continuar.\n', 'bien');
+}
+
+async function tablas() {
+  const res = await pedir({ esquema: true });
+  if (res.error) return escribir(res.error, 'error nota');
+  escribir('\n' + Object.entries(res).map(([t, d]) => `${t.toUpperCase().padEnd(16)} ${d.filas} filas`).join('\n') + '\n');
+}
+
+async function procesar(texto) {
+  const orden = texto.trim().replace(/;$/, '').trim().toLowerCase().replace('ó', 'o');
+  let m;
+  if (orden === 'ayuda' || orden === 'help') return escribir(AYUDA);
+  if (orden === 'retos') return escribir(RETOS.map((r, i) => `${r.sem !== RETOS[i - 1]?.sem ? `\n${r.sem ? 'Semana ' + r.sem + ': ' : ''}${SEMANAS[r.sem]}\n` : ''}${hechos.has(r.titulo) ? '*' : ' '} ${String(i + 1).padStart(2)}. ${r.titulo}`).join('\n') + '\n(* = resuelto)\n');
+  if ((m = orden.match(/^semana\s+(\d+)$/))) {
+    const i = RETOS.findIndex(r => r.sem === Number(m[1]));
+    return i < 0 ? escribir('Hay semanas de consultas de la 1 a la 6.', 'error') : abrir(i);
+  }
+  if ((m = orden.match(/^reto\s+(\d+)$/))) return abrir(Number(m[1]) - 1);
+  if (orden === 'siguiente') return abrir((actual + 1) % RETOS.length);
+  if (orden === 'comprobar') return comprobar();
+  if (orden === 'pista' || orden === 'solucion') {
+    if (!RETOS[actual]) return escribir('Primero abre un reto: RETO 1', 'error');
+    return escribir(orden === 'pista' ? RETOS[actual].pista : RETOS[actual].sql + ';', 'info nota');
+  }
+  if (orden === 'tablas') return tablas();
+  if (orden === 'clear' || orden === 'cls' || orden === 'clear screen') return $('salida').replaceChildren();
+  const sql = texto.replace(/\n\s*\/\s*$/, '').trim();
+  const res = await pedir({ sql });
+  if (res.error) return escribir('\nERROR:\n' + res.error + '\n', 'error nota');
+  if (!/^desc/i.test(sql)) ultima = sql;
+  tabla(res);
+}
+
+const COMANDO = /^\s*(ayuda|help|retos|reto\s+\d+|semana\s+\d+|siguiente|comprobar|pista|soluci[oó]n|tablas|clear( screen)?|cls|desc(ribe)?\s+\w+)\s*;?\s*$/i;
+
+function ajustar() {
+  const t = $('linea'), n = t.value.split('\n').length;
+  t.rows = n;
+  $('prompt').textContent = ['SQL>', ...Array.from({ length: n - 1 }, (_, i) => String(i + 2).padStart(3) + ' ')].join('\n');
+}
+
+$('linea').addEventListener('input', ajustar);
+$('linea').addEventListener('keydown', async e => {
+  const t = $('linea');
+  if (e.key === 'Enter' && !e.shiftKey) {
+    const texto = t.value;
+    // Como en SQL*Plus: sigue pidiendo líneas hasta ; o / (una línea vacía cancela)
+    const vacia = texto.includes('\n') && /\n[ \t]*$/.test(texto);
+    const lista = e.ctrlKey || !texto.trim() || COMANDO.test(texto) || /;\s*(--.*)?$/.test(texto) || /\n\s*\/\s*$/.test(texto);
+    if (!lista && !vacia) return;
+    e.preventDefault();
+    if (ocupado) return;
+    escribir($('prompt').textContent.split('\n').map((p, i) => p + ' ' + (texto.split('\n')[i] ?? '')).join('\n'));
+    t.value = ''; ajustar();
+    if (texto.trim()) {
+      historial.push(texto.trimEnd()); historial.splice(0, historial.length - 100); pos = historial.length;
+      localStorage.setItem('hr-historial', JSON.stringify(historial));
+      if (lista) { ocupado = true; await procesar(texto); ocupado = false; }
+    }
+    $('terminal').scrollTop = $('terminal').scrollHeight;
+  } else if (e.key === 'Escape') {
+    t.value = ''; pos = historial.length; ajustar();
+  } else if ((e.key === 'ArrowUp' && !t.value.slice(0, t.selectionStart).includes('\n')) ||
+             (e.key === 'ArrowDown' && !t.value.slice(t.selectionEnd).includes('\n'))) {
+    e.preventDefault();
+    pos = Math.max(0, Math.min(historial.length, pos + (e.key === 'ArrowUp' ? -1 : 1)));
+    t.value = historial[pos] ?? ''; ajustar();
+  }
+});
+$('terminal').addEventListener('click', () => { if (!String(getSelection())) $('linea').focus(); });
+
+escribir('SQL*Plus (práctica) · El Tío Sam · escribe TABLAS para verlas.\nEscribe AYUDA para ver los comandos.', 'nota');
+abrir(0);
+</script>
+</body>
+</html>
