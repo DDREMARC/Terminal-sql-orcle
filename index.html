@@ -18,11 +18,13 @@
 </style>
 </head>
 <body>
-<header><span>SQL*Plus · práctica (Oracle XE local)</span><span id="barra"></span></header>
+<header><span id="modo">SQL*Plus · práctica (Oracle XE local)</span><span id="barra"></span></header>
 <main id="terminal">
   <div id="salida" role="log" aria-live="polite"></div>
   <div class="entrada"><pre id="prompt" aria-hidden="true">SQL&gt;</pre><textarea id="linea" rows="1" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus aria-label="Línea de comandos SQL"></textarea></div>
 </main>
+<script src="datos.js"></script>
+<script src="motor.js"></script>
 <script src="retos-tiosam.js"></script>
 <script src="retos-tiosam-semanas.js"></script>
 <script>
@@ -32,14 +34,7 @@ const hechos = new Set(leer('hr-hechos', []));
 const historial = leer('hr-historial', []);
 let actual = -1, ultima = '', pos = historial.length, ocupado = false;
 
-async function pedir(cuerpo) {
-  try {
-    const r = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Practica': '1' }, body: JSON.stringify(cuerpo) });
-    return await r.json();
-  } catch {
-    return { error: 'ORA-12541: sin respuesta. Revisa que Apache y Oracle estén encendidos.' };
-  }
-}
+const pedir = MOTOR.pedir;
 
 function escribir(texto, clase = '') {
   const p = document.createElement('pre');
@@ -173,6 +168,10 @@ $('linea').addEventListener('keydown', async e => {
 $('terminal').addEventListener('click', () => { if (!String(getSelection())) $('linea').focus(); });
 
 escribir('SQL*Plus (práctica) · El Tío Sam · escribe TABLAS para verlas.\nEscribe AYUDA para ver los comandos.', 'nota');
+if (MOTOR.simular) {
+  $('modo').textContent = 'SQL*Plus · práctica (Oracle SIMULADO)';
+  escribir('Modo simulado: corre en tu navegador con datos de ejemplo. La primera consulta tarda unos segundos.\nLos mensajes de error pueden variar frente a Oracle real.', 'nota');
+}
 abrir(0);
 </script>
 </body>

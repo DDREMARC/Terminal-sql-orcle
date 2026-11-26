@@ -3,7 +3,12 @@
 Terminal en el navegador, estilo SQL*Plus, para practicar consultas sobre la base del chifa **El Tío Sam**.
 Ejecuta las consultas en un Oracle real local. Solo permite `SELECT` y `DESC`, y solo desde la misma PC.
 
-## Requisitos
+## Versión simulada (GitHub Pages)
+Fuera de `localhost` la terminal **simula** Oracle en el navegador (PostgreSQL con PGlite y funciones tipo Oracle),
+con datos de ejemplo (`datos.js`). No necesita instalar nada, solo internet. No es Oracle real:
+los mensajes de error y algunos detalles pueden variar. Para probarla en local, agrega `?sim=1` a la dirección.
+
+## Requisitos (solo para Oracle real)
 - Oracle XE (probado en 11.2)
 - XAMPP (Apache + PHP 8) con la extensión `oci8`
 - Las 8 tablas del Tío Sam creadas: ver el repo [base-de-datos-final-semana16](https://github.com/DDREMARC/base-de-datos-final-semana16), carpeta `sql/`
