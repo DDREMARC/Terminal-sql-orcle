@@ -7,7 +7,9 @@
   async function oracle(cuerpo) {
     try {
       const r = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Practica': '1' }, body: JSON.stringify(cuerpo) });
-      return await r.json();
+      const res = await r.json();
+      if (res.error) res.error = ERRORES.oracle(res.error);
+      return res;
     } catch {
       return { error: 'ORA-12541: sin respuesta. Revisa que Apache y Oracle estén encendidos.' };
     }
@@ -208,19 +210,6 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
     return t;
   }
 
-  // Mensajes parecidos a los de Oracle para los errores más comunes
-  function errorOracle(e) {
-    const codigos = { '42P01': 'ORA-00942: la tabla o vista no existe', '42703': 'ORA-00904: identificador no válido', '42803': 'ORA-00979: no es una expresión GROUP BY',
-      '42601': 'ORA-00933: comando SQL no terminado correctamente', '22012': 'ORA-01476: el divisor es igual a cero', '42883': 'ORA-00904: función o tipos de argumento no válidos',
-      '42702': 'ORA-00918: columna definida de forma ambigua', '21000': 'ORA-01427: la subconsulta de una fila devuelve más de una fila', '22P02': 'ORA-01722: número no válido',
-      '23505': 'ORA-00001: restricción única violada', '23502': 'ORA-01400: no se puede insertar NULL', '23514': 'ORA-02290: restricción de control violada',
-      '23503': /^update or delete/.test(e.message) ? 'ORA-02292: restricción de integridad violada - registro secundario encontrado' : 'ORA-02291: restricción de integridad violada - clave principal no encontrada',
-      '22001': 'ORA-12899: valor demasiado grande para la columna', '22003': 'ORA-01438: valor mayor que la precisión permitida', '42P07': 'ORA-00955: este nombre ya lo está utilizando otro objeto',
-      '2BP01': 'ORA-02449: hay claves ajenas que hacen referencia a la tabla', '3B001': 'ORA-01086: no se ha establecido ese punto de salvaguarda' };
-    if (e.message.startsWith('ORA-')) return e.message;
-    return `${codigos[e.code] || 'ORA-00900: sentencia no válida'}\n(simulador: ${e.message})`;
-  }
-
   // ---------- Ejecución con transacciones como en Oracle ----------
   let abierta = false;
   async function abrirTx(db) { if (!abierta) { await db.exec('BEGIN'); abierta = true; } }
@@ -326,9 +315,9 @@ CREATE FUNCTION months_between(a timestamp, b timestamp) RETURNS numeric LANGUAG
     const turno = cola.then(async () => {
       let db;
       try { db = await base(); }
-      catch (e) { return { error: 'No se pudo cargar el simulador. Revisa tu internet y vuelve a intentar.\n' + e.message }; }
+      catch { return { error: 'No se pudo cargar el simulador. Revisa tu internet y vuelve a intentar.' }; }
       try { return await ejecutar(db, cuerpo); }
-      catch (e) { return { error: errorOracle(e) }; }
+      catch (e) { return { error: ERRORES.simulador(e) }; }
     });
     cola = turno;
     return turno;
