@@ -23,8 +23,8 @@
   <div id="salida" role="log" aria-live="polite"></div>
   <div class="entrada"><pre id="prompt" aria-hidden="true">SQL&gt;</pre><textarea id="linea" rows="1" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus aria-label="Línea de comandos SQL"></textarea></div>
 </main>
-<script src="datos.js?v=4"></script>
-<script src="motor.js?v=4"></script>
+<script src="datos.js?v=5"></script>
+<script src="motor.js?v=5"></script>
 <script src="retos-tiosam.js"></script>
 <script src="retos-tiosam-semanas.js"></script>
 <script>
@@ -68,6 +68,9 @@ Una consulta termina en ;  (o con / en una línea sola). Enter sin ; sigue en la
   PISTA        ayuda del reto        SOLUCION     muestra la respuesta
   TABLAS       tablas disponibles    DESC tabla   columnas de una tabla
   CLEAR        limpia la pantalla
+  Solo en modo simulado:
+  INSERT, UPDATE, DELETE, COMMIT, ROLLBACK, SAVEPOINT, CREATE, ALTER, DROP, TRUNCATE
+  REINICIAR    borra tus cambios y vuelve a los datos originales
   Flechas arriba/abajo: historial.   Esc: borra lo que escribes.
 `;
 
@@ -122,14 +125,23 @@ async function procesar(texto) {
   }
   if (orden === 'tablas') return tablas();
   if (orden === 'clear' || orden === 'cls' || orden === 'clear screen') return $('salida').replaceChildren();
-  const sql = texto.replace(/\n\s*\/\s*$/, '').trim();
-  const res = await pedir({ sql });
-  if (res.error) return escribir('\nERROR:\n' + res.error + '\n', 'error nota');
-  if (!/^desc/i.test(sql)) ultima = sql;
-  tabla(res);
+  if (MOTOR.simular) {
+    if (orden === 'reiniciar') { const r = await pedir({ reiniciar: true }); ultima = ''; return r.error ? escribir(r.error, 'error nota') : escribir(r.mensaje, 'bien'); }
+    if (orden === 'show user') return escribir('USER es "TIOSAM"\n');
+    if (orden.startsWith('set ')) return;
+  }
+  // En el simulador se pueden pegar varias sentencias juntas
+  const lote = MOTOR.simular ? MOTOR.sentencias(texto) : [texto.replace(/\n\s*\/\s*$/, '').trim()];
+  for (const sql of lote) {
+    const res = await pedir({ sql });
+    if (res.error) escribir('\nERROR:\n' + res.error + '\n', 'error nota');
+    else if (res.mensaje) escribir(res.mensaje);
+    else { if (!/^desc/i.test(sql)) ultima = sql; tabla(res); }
+    $('terminal').scrollTop = $('terminal').scrollHeight;
+  }
 }
 
-const COMANDO = /^\s*(ayuda|help|retos|reto\s+\d+|semana\s+\d+|siguiente|comprobar|pista|soluci[oó]n|tablas|clear( screen)?|cls|desc(ribe)?\s+\w+)\s*;?\s*$/i;
+const COMANDO = /^\s*(ayuda|help|retos|reto\s+\d+|semana\s+\d+|siguiente|comprobar|pista|soluci[oó]n|tablas|clear( screen)?|cls|commit|rollback|reiniciar|show user|set\s+\w+.*|desc(ribe)?\s+\w+)\s*;?\s*$/i;
 
 function ajustar() {
   const t = $('linea'), n = t.value.split('\n').length;
